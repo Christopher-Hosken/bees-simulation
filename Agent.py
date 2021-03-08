@@ -1,23 +1,36 @@
+import numpy as np
 import random
-
-class Agent():
+class Agent:
+    _name = ""
+    _male = False
     _id = None
     _age = 0
-    _joy = 0.2
-    _voteChance = 1
-    _voted = False
-    _agentRanking = []
-    _lastAgentsId = []
+    _spouse = None
+    _parent = False
+    _children = []
+    _interactions = []
+    _deathAge = 0
+    
+    def __init__(self, newID, day):
+        self._name = f"Agent{day}-{newID}"
+        self._id = newID
+        self._age = 0
+        if random.random() < 0.512:
+           self._male = True
 
-    def __init__(self, population, id, influence):
-        self._id = id
-        self._agentRanking = [0.0] * population
-        self._lastAgentsId = [0] * influence
+        self.setDeathAge()
 
-    def forget(self):
-        self._lastAgentsId = [0] * len(self._lastAgentsId)
-        self._agentRanking = None
-        self._voted = False
+    def getDeathAge(self):
+        return self._deathAge
+
+    def setDeathAge(self):
+        if self._male:
+            self._deathAge = 79 + random.randint(-5, 5)
+        else:
+            self._deathAge = 83 + random.randint(-5, 5)
+        
+    def getName(self):
+        return self._name
 
     def getID(self):
         return self._id
@@ -25,66 +38,93 @@ class Agent():
     def getAge(self):
         return self._age
 
-    def getJoy(self):
-        return self._joy
+    def isMale(self):
+        return self._male
 
-    def getVoteChance(self):
-        return self._voteChance
+    def isMarried(self):
+        if self._spouse is not None:
+            return True
+        else:
+            return False
 
-    def getAgentRanking(self):
-        return self._agentRanking
+    def isParent(self):
+        return self._parent
 
-    def getLastAgents(self):
-        return self._lastAgentsId
-
-    def setAgentScore(self, idx, score):
-        self._agentRanking[idx] = score
+    def getSpouse(self):
+        return self._spouse
     
-    def grow(self):
+    def getChildren(self):
+        return self._children
+
+    def getInteractions(self):
+        return self._interactions
+
+    def getScore(self, id):
+        if len(self._interactions) > 0:
+            for i in self._interactions:
+                if i[0] == id:
+                    return i[1]
+        return None
+
+    def setSpouse(self, spouse):
+        self._spouse = spouse.getName()
+
+    def setChild(self, name):
+        self._children.append(name)
+        self._parent = True
+
+    def setID(self, id):
+        self._id = id
+
+    def age(self):
+        self.think()
         self._age += 1
 
-    def setNewIdx(self, newIdx):
-        self._id = newIdx
+    def think(self):
+        pass
 
-    def setNewAgentRanking(self, newSize):
-        self._agentRanking = [0.0] * newSize
-
-    def interact(self, agent):
-        agentID = agent.getID()
-        success = random.random()
-        self._agentRanking[agentID] = (success - 0.5) * 2
-        self.influence(agent, success)
-
-    def influence(self, agent, success):
-        for lastAgentidx in self._lastAgentsId:
-            view = (self._agentRanking[lastAgentidx] * success)
-            agent.setAgentScore(lastAgentidx, view)
-
-    def vote(self):
-        lowestIdx = 0
-        if (random.random() <= self._voteChance):
-            for i in range (0, len(self._agentRanking)):
-                if (self._agentRanking[i] < self._agentRanking[lowestIdx]):
-                    lowestIdx = i
-
-            self._voted = True
-            return lowestIdx
-
-        else:
-            self._voted = False
-            return -1
-
-    def learn(self, outcastIdx):
-        if (self._voted):
-            self._joy -= (self._agentRanking[outcastIdx] * 0.3)
+    def interact(self, id, score):
+        if len(self._interactions) > 0:
+            for i in self._interactions:
+                if i[0] == id:
+                    i[1] =  np.clip(i[1] + score, -1, 1)
+                    return
         
-        self.capJoy()
-        self._voteChance = (self._joy*0.7)
-        self.grow()
-        self.forget()
+        self._interactions.append([id, score])
 
-    def capJoy(self):
-        if (self._joy < 0):
-            self._joy = 0
-        elif (self._joy > 1):
-            self._joy = 1
+    def forgetAgents(self, deceased):
+        for deadID in deceased:
+            for i in self._interactions:
+                if (i[0] == deadID):
+                    del self._interactions[self._interactions.index(i)]
+                    break
+
+def socialize(a, b):
+    id_a = a.getID()
+    id_b = b.getID()
+
+    r = random.random()
+    score = (r - 0.5) * 2
+
+    a.interact(id_b, score)
+    b.interact(id_a, score)
+
+def tryMarry(a, b):
+    id_a = a.getID()
+    id_b = b.getID()
+    a_score = b.getScore(id_a)
+    b_score = a.getScore(id_b)
+    if a_score is not None and b_score is not None:
+        if a.isMale() != b.isMale():
+            if a_score >= 0.9 and b_score >= 0.9:
+                a.setSpouse(b)
+                b.setSpouse(a)
+                return True
+    return False
+
+def findSpouse(agent, _agents):
+    spouseName = agent.getSpouse()
+    for a in _agents:
+        if a.getName() == spouseName:
+            return a
+    return None

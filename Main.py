@@ -1,123 +1,155 @@
+from Agent import Agent, findSpouse, socialize, tryMarry
 import random
 import matplotlib.pyplot as plt
-from Agent import Agent
 
-DAYS = 1095
-INTERACTIONS = 12
-INFLUENCE = 5
-AGENTS = 10
-
-agent_list = [None] * AGENTS
-
-day_list = [0]*DAYS
-joy_list = [0]*DAYS
-population_list = [0]*DAYS
-CURRENT_DAY = 0
+AGENTS = 50
+DAYS = 250
+INTERACTIONS = 3
 
 
-def main():
-    global agent_list, AGENTS, CURRENT_DAY
-    setupPopulation()
-    joy_plot = plt.subplot(211)
-    plt.ylabel('Happiness')
-    plt.title("Average Population Happiness")
+class World:
+    _agents = []
+    _days = 0
+    _currentDay = 1
+    _interactions = 0
+    _people = []
+    _dayList = []
+    _populationList = []
+    _birthList = []
+    _deathList = []
+    _marriedList = []
 
-    population_plot = plt.subplot(212)
-    plt.xlabel('Days')
-    plt.ylabel('Population')
-    plt.title("Population")
+    def __init__(self, agents, days, interactions):
+        self.initAgents(agents)
+        self._days = days
+        self._interactions = interactions
 
-    for d in range(0, DAYS):
-        CURRENT_DAY = d
-        socialise()
-        outcastIdx = doVote()
-        editPopulation(outcastIdx)
-        day_list.append(d)
-        joy_list.append(getJoy())
-        population_list.append(len(agent_list))
-        joy_plot.plot(day_list, joy_list)
-        population_plot.plot(day_list, population_list)
-        plt.pause(0.1)
-    
-    plt.show()
+    def run(self):
+        l = False
+        plt.plot()
+        plt.xlabel('Days')
+        plt.ylabel('Agents')
+        plt.title("Population")
 
-def setupPopulation():
-    for i in range(0, len(agent_list)):
-        tmp = Agent(AGENTS, i, INFLUENCE)
-        agent_list[i] = tmp
+        for d in range(0, self._days):
+            plt.plot(self._dayList, self._populationList,
+                     label='Population', color='blue')
+            plt.plot(self._dayList, self._birthList,
+                     label='Births', color='green')
+            plt.plot(self._dayList, self._deathList,
+                     label='Deaths', color='red')
+            plt.plot(self._dayList, self._marriedList,
+                     label=f'Weddings', color='pink')
+            if not l:
+                plt.legend()
+                l = True
 
-def socialise():
-    for thisAgent in agent_list:
-        for i in range(0, INTERACTIONS):
-            while True:
-                idx = random.randrange(0, len(agent_list))
-                thatAgent = agent_list[idx]
-                if thisAgent.getID() != thatAgent.getID():
-                    break
-            thisAgent.interact(thatAgent)
-            thatAgent.interact(thisAgent)
+            plt.pause(0.05)
+
+            print("Day:", self._currentDay)
+            self.doInteractions()
+            self.doWeddings()
+            self.repopulate()
+            self.nextDay()
+
+            if len(self._agents) == 0:
+                break
+        plt.show()
+
+    def initAgents(self, agents):
+        self._agents = [None] * agents
+        for i in range(0, len(self._agents)):
+            a = Agent(i, self._currentDay)
+            self._agents[i] = a
+
+    def doInteractions(self):
+        if len(self._agents) > 1:
+            for agent in self._agents:
+                agentID = agent.getID()
+                for i in range(0, self._interactions):
+                    randAgent = None
+                    while True:
+                        randAgent = self._agents[random.randrange(
+                            0, len(self._agents))]
+                        randID = randAgent.getID()
+                        if randID != agentID:
+                            break
+                    socialize(agent, randAgent)
+
+    def doWeddings(self):
+        weddings = 0
+        for agent in self._agents:
+            if agent.getAge() > 16:
+                agentID = agent.getID()
+                if not agent.isMarried():
+                    other = None
+                    for other in self._agents:
+                        otherID = other.getID()
+                        if otherID != agentID:
+                            if not other.isMarried():
+                                success = tryMarry(agent, other)
+                                if success:
+                                    weddings += 1
+
+        self._marriedList.append(weddings)
+
+    def repopulate(self):
+        deceased = []
+        births = 0
+        for agent in self._agents:
+            if agent.getAge() >= agent.getDeathAge():
+                self._agents.remove(agent)
+                deceased.append(agent.getID())
+            else:
+                if agent.isMarried():
+                    spouse = findSpouse(agent, self._agents)
+                    if spouse is not None:
+                        if not agent.isMale():
+                            if agent.getAge() <= 40 + random.randint(-5, 5):
+                                chance = 1
+                                if not agent.isParent():
+                                    chance = 0.545
+
+                                elif len(agent.getChildren()) == 1:
+                                    chance = 0.321
+
+                                elif len(agent.getChildren()) == 2:
+                                    chance = 0.133
+                                
+                                else:
+                                    chance = 0.09
+
+                                
+                                if (random.random() < chance):
+                                    for i in range(0, 1):
+                                        c = Agent(len(self._agents), self._currentDay)
+                                        births += 1
+                                        self._agents.append(c)
+                                        agent.setChild(c.getName())
+                                        spouse.setChild(c.getName())
 
 
-def doVote():
-    outcastIdx = 0
-    ranking = [0] * len(agent_list)
-    for agent in agent_list:
-        vote = agent.vote()
-        if vote != -1:
-            ranking[vote] -= 1
+                            
 
-    for i in range(0, len(ranking)):
-        if (ranking[i] < ranking[outcastIdx]):
-            outcastIdx = i
+        self._deathList.append(len(deceased))
+        self._birthList.append(births)
 
-    return outcastIdx
+        for i, agent in enumerate(self._agents):
+            agent.setID(i)
+            agent.forgetAgents(deceased)
 
+    def nextDay(self):
+        for agent in self._agents:
+            agent.age()
 
-def editPopulation(outcastIdx):
-    global AGENTS
-    del agent_list[outcastIdx]
-    old = []
-    for i in range (0, len(agent_list)):
-        if agent_list[i].getAge() > (80 + (((random.random() - 0.5) * 2) * 25)):
-            old.append(i)
-    for x in old:
-        del agent_list[x]
+        self._dayList.append(self._currentDay)
+        self._populationList.append(len(self._agents))
 
-    for a in range(0, len(agent_list)):
-        agent = agent_list[a]
-        agent.learn(outcastIdx)
-        agent.setNewIdx(a)
-
-    repopulate()
-    AGENTS = len(agent_list)
-
-def repopulate():
-    global AGENTS, CURRENT_DAY, INFLUENCE
-    children = 0
-
-    for agent in agent_list:
-        if agent.getAge() > 18:
-                if agent.getJoy() > 0.8:
-                    if (random.random() < 0.2):
-                        children += 1
-    
-    AGENTS += children
-
-    for c in range(len(agent_list), AGENTS):
-        child = Agent(AGENTS, c, INFLUENCE)
-        agent_list.append(child)
-    
-    for agent in agent_list:
-        agent.setNewAgentRanking(len(agent_list))
+        self._currentDay += 1
 
 
-def getJoy():
-    joy = 0
-    for agent in agent_list:
-        joy += agent.getJoy()
+world = World(AGENTS, DAYS, INTERACTIONS)
 
-    joy /= len(agent_list)
 
-    return joy
-
-main()
+if __name__ == '__main__':
+    world.run()
